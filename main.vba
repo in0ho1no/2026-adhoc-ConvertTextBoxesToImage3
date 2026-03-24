@@ -65,7 +65,8 @@ Sub ConvertShapesToImages()
         With newRect
             .TextFrame2.TextRange.Text = shp.TextFrame2.TextRange.Text
             With .TextFrame2.TextRange.Font
-                .Name = "Meiryo UI"
+                .Name        = "Meiryo UI"   ' 半角英数字
+                .NameFarEast = "Meiryo UI"   ' 日本語文字
                 .Size = 10
                 .Fill.ForeColor.RGB = RGB(0, 0, 0)
             End With
