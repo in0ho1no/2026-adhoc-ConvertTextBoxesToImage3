@@ -169,9 +169,9 @@ End Sub
 
 Sub ConvertLinkedPicturesToImages()
 
-    Dim ws          As Worksheet
-    Dim shp         As Shape
-    Dim stepMsg     As String
+    Dim ws      As Worksheet
+    Dim shp     As Shape
+    Dim stepMsg As String
     Dim L As Double, T As Double, W As Double, H As Double
 
     Set ws = ActiveSheet
@@ -183,13 +183,14 @@ Sub ConvertLinkedPicturesToImages()
     On Error GoTo ErrHandler
 
     '── 先に名前リストを取得（ループ中に図形数が変わるため）──
-    stepMsg = "リンク画像の名前リスト取得中"
+    stepMsg = "カメラ画像の名前リスト取得中"
     Dim lpNames() As String
     Dim lpCount   As Integer
     lpCount = 0
 
     For Each shp In ws.Shapes
-        If shp.Type = msoLinkedPicture Then
+        ' Type=13 かつ Formula あり → カメラ機能の図形
+        If shp.Type = 13 And shp.Formula <> "" Then
             lpCount = lpCount + 1
             ReDim Preserve lpNames(lpCount - 1)
             lpNames(lpCount - 1) = shp.Name
@@ -197,7 +198,7 @@ Sub ConvertLinkedPicturesToImages()
     Next shp
 
     If lpCount = 0 Then
-        MsgBox "リンクされた画像は見つかりませんでした。", vbInformation, "対象なし"
+        MsgBox "カメラ機能の画像は見つかりませんでした。", vbInformation, "対象なし"
         GoTo Cleanup
     End If
 
@@ -212,22 +213,18 @@ Sub ConvertLinkedPicturesToImages()
         On Error GoTo ErrHandler
         If shp Is Nothing Then GoTo NextLP
 
-        ' 位置・サイズを記録
         L = shp.Left
         T = shp.Top
         W = shp.Width
         H = shp.Height
 
-        ' 画像としてコピー
         stepMsg = "CopyPicture中 [" & lpNames(j) & "]"
         shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
-        ' 元のリンク画像を削除
         stepMsg = "削除中 [" & lpNames(j) & "]"
         shp.Delete
         Set shp = Nothing
 
-        ' 通常画像として貼り付け・位置復元
         stepMsg = "貼り付け中 [" & lpNames(j) & "]"
         ws.Paste
         With ws.Shapes(ws.Shapes.Count)
@@ -241,7 +238,7 @@ Sub ConvertLinkedPicturesToImages()
 NextLP:
     Next j
 
-    MsgBox "✅ 完了：" & lpCount & " 件のリンク画像を通常画像に変換しました。", _
+    MsgBox "✅ 完了：" & lpCount & " 件のカメラ画像を通常画像に変換しました。", _
            vbInformation, "処理完了"
 
 Cleanup:
