@@ -1,3 +1,6 @@
+'═══════════════════════════════════════════════════════
+' メイン実行：全シートを対象に一括処理
+'═══════════════════════════════════════════════════════
 Sub RunAll()
     Dim ws As Worksheet
     For Each ws In ThisWorkbook.Worksheets
@@ -8,7 +11,7 @@ Sub RunAll()
 End Sub
 
 '═══════════════════════════════════════════════════════
-' カメラ画像 → 通常画像
+' カメラ画像（Type=13）→ 通常画像に変換
 '═══════════════════════════════════════════════════════
 Sub ConvertLinkedPicturesToImages(ws As Worksheet)
 
@@ -22,6 +25,7 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
 
     On Error GoTo ErrHandler
 
+    '── 先に名前リストを取得（ループ中に図形数が変わるため）──
     stepMsg = "[" & ws.Name & "] カメラ画像の名前リスト取得中"
     Dim lpNames() As String
     Dim lpCount   As Integer
@@ -37,6 +41,7 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
 
     If lpCount = 0 Then GoTo Cleanup
 
+    '── 1つずつ変換 ──────────────────────────────────────
     Dim j As Integer
     For j = 0 To lpCount - 1
         stepMsg = "[" & ws.Name & "] CopyPicture中 [" & lpNames(j) & "]"
@@ -106,7 +111,9 @@ Sub ConvertShapesToImages(ws As Worksheet)
 
     On Error GoTo ErrHandler
 
-    '── STEP 1-3: テキストボックス整形 → 長方形置換 ──────────
+    '═══════════════════════════════════════════════════════
+    ' STEP 1 & 2 & 3: テキストボックス整形 → 長方形置換
+    '═══════════════════════════════════════════════════════
     stepMsg = "[" & ws.Name & "] テキストボックス名リスト取得中"
     Dim tbNames() As String
     Dim tbCount   As Integer
@@ -131,12 +138,15 @@ Sub ConvertShapesToImages(ws As Worksheet)
         On Error GoTo ErrHandler
         If shp Is Nothing Then GoTo NextTB
 
+        ' STEP1: 縦横3倍に引き伸ばす（見切れ解消）
         shp.Width  = shp.Width  * 3
         shp.Height = shp.Height * 3
 
+        ' STEP2: テキストにフィットさせる
         stepMsg = "[" & ws.Name & "] STEP2: AutoSize中 [" & shpName & "]"
         shp.TextFrame2.AutoSize = msoAutoSizeShapeToFitText
 
+        ' STEP3: 長方形を新規作成し属性を引き継ぐ
         stepMsg = "[" & ws.Name & "] STEP3: 長方形作成中 [" & shpName & "]"
         Dim newRect As Shape
         Set newRect = ws.Shapes.AddShape( _
@@ -158,6 +168,7 @@ Sub ConvertShapesToImages(ws As Worksheet)
             .Name = "RECT_" & shpName
         End With
 
+        ' 元テキストボックスを削除
         stepMsg = "[" & ws.Name & "] STEP3: 元テキストボックス削除 [" & shpName & "]"
         shp.Delete
         Set shp = Nothing
@@ -165,7 +176,10 @@ Sub ConvertShapesToImages(ws As Worksheet)
 NextTB:
     Next j
 
-    '── STEP 4: TopLeftCell ごとに集約 ───────────────────────
+    '═══════════════════════════════════════════════════════
+    ' STEP 4: TopLeftCell ごとに図形を集約
+    ' ※ すでに画像になっているもの（Picture）はスキップ
+    '═══════════════════════════════════════════════════════
     stepMsg = "[" & ws.Name & "] STEP4: 図形の集約中"
     For Each shp In ws.Shapes
         If shp.Type <> msoPicture And shp.Type <> msoLinkedPicture Then
@@ -178,7 +192,9 @@ NextTB:
         End If
     Next shp
 
-    '── STEP 5: グループ化 → 画像化 → 置き換え ───────────────
+    '═══════════════════════════════════════════════════════
+    ' STEP 5: グループ化 → 画像化 → 置き換え
+    '═══════════════════════════════════════════════════════
     For Each k In dict.Keys
         Set col = dict(k)
         If col.Count = 0 Then GoTo NextKey
@@ -188,6 +204,7 @@ NextTB:
             varArr(i - 1) = col(i)
         Next i
 
+        ' 1つだけならそのまま・2つ以上はSelect方式でグループ化（多数図形でも安定）
         stepMsg = "[" & ws.Name & "] STEP5: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
         If col.Count = 1 Then
             Set targetShape = ws.Shapes(varArr(0))
@@ -204,12 +221,15 @@ NextTB:
         W = targetShape.Width
         H = targetShape.Height
 
+        ' 画像としてコピー
         stepMsg = "[" & ws.Name & "] STEP5: CopyPicture中 [セル " & k & "]"
         targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
+        ' 元図形を削除
         stepMsg = "[" & ws.Name & "] STEP5: 元図形削除中 [セル " & k & "]"
         targetShape.Delete
 
+        ' シートに貼り付けて位置・サイズを復元
         stepMsg = "[" & ws.Name & "] STEP5: Paste中 [セル " & k & "]"
         ws.Paste
         With ws.Shapes(ws.Shapes.Count)
