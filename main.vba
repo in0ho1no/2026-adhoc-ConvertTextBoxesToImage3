@@ -11,7 +11,7 @@ Sub RunAll()
     On Error GoTo ErrHandler
 
     For Each ws In ThisWorkbook.Worksheets
-        ws.Activate  ' ← Selectを使うために必須
+        ws.Activate
         Call ConvertLinkedPicturesToImages(ws)
         Call ConvertShapesToImages(ws)
     Next ws
@@ -41,6 +41,7 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
     Dim lpNames() As String
     Dim lpCount   As Integer
     Dim j         As Integer
+    Dim newPic    As Shape
 
     On Error GoTo ErrHandler
 
@@ -73,18 +74,21 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         stepMsg = "[" & ws.Name & "] CopyPicture中 [" & lpNames(j) & "]"
         shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
+        ' 先に貼り付けてから削除する（削除するとクリップボードが消えるため）
+        stepMsg = "[" & ws.Name & "] 貼り付け中 [" & lpNames(j) & "]"
+        ws.Paste
+        Set newPic = ws.Shapes(ws.Shapes.Count)
+
         stepMsg = "[" & ws.Name & "] 削除中 [" & lpNames(j) & "]"
         shp.Delete
         Set shp = Nothing
 
-        stepMsg = "[" & ws.Name & "] 貼り付け中 [" & lpNames(j) & "]"
-        ws.Paste
-        With ws.Shapes(ws.Shapes.Count)
-            .Left  = L
-            .Top   = T
+        With newPic
+            .Left   = L
+            .Top    = T
             .Width  = W
             .Height = H
-            .Name  = "PIC_" & lpNames(j)
+            .Name   = "PIC_" & lpNames(j)
         End With
 
 NextLP:
@@ -117,6 +121,7 @@ Sub ConvertShapesToImages(ws As Worksheet)
     Dim shpName     As String
     Dim newRect     As Shape
     Dim cellAddr    As String
+    Dim newPic      As Shape
 
     Set dict = CreateObject("Scripting.Dictionary")
 
@@ -223,12 +228,15 @@ NextTB:
         stepMsg = "[" & ws.Name & "] STEP5: CopyPicture中 [セル " & k & "]"
         targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
+        ' 先に貼り付けてから削除する（削除するとクリップボードが消えるため）
+        stepMsg = "[" & ws.Name & "] STEP5: Paste中 [セル " & k & "]"
+        ws.Paste
+        Set newPic = ws.Shapes(ws.Shapes.Count)
+
         stepMsg = "[" & ws.Name & "] STEP5: 元図形削除中 [セル " & k & "]"
         targetShape.Delete
 
-        stepMsg = "[" & ws.Name & "] STEP5: Paste中 [セル " & k & "]"
-        ws.Paste
-        With ws.Shapes(ws.Shapes.Count)
+        With newPic
             .Left   = L
             .Top    = T
             .Width  = W
