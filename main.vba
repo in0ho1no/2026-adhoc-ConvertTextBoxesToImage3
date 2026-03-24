@@ -1,8 +1,13 @@
 '═══════════════════════════════════════════════════════
-' メイン実行：全シートを対象に一括処理
+' メイン実行：アクティブブックの全シートを対象に一括処理
 '═══════════════════════════════════════════════════════
 Sub RunAll()
-    Dim ws As Worksheet
+    Dim wb          As Workbook
+    Dim ws          As Worksheet
+    Dim totalSheets As Integer
+    Dim currentIdx  As Integer
+
+    Set wb = ActiveWorkbook  ' マクロ保存ブックではなくアクティブブックを対象にする
 
     Application.ScreenUpdating = False
     Application.EnableEvents   = False
@@ -10,20 +15,31 @@ Sub RunAll()
 
     On Error GoTo ErrHandler
 
-    For Each ws In ThisWorkbook.Worksheets
+    totalSheets = wb.Worksheets.Count
+    currentIdx  = 0
+
+    For Each ws In wb.Worksheets
+        currentIdx = currentIdx + 1
+
+        ' 進捗をステータスバーに表示
+        Application.StatusBar = "処理中... [" & currentIdx & " / " & totalSheets & "] " & ws.Name
+
         ws.Activate
         Call ConvertLinkedPicturesToImages(ws)
         Call ConvertShapesToImages(ws)
     Next ws
 
+    Application.StatusBar = False  ' ステータスバーを元に戻す
+
     Application.ScreenUpdating = True
     Application.EnableEvents   = True
     Application.Calculation    = xlCalculationAutomatic
 
-    MsgBox "✅ 全シートの処理が完了しました。", vbInformation, "処理完了"
+    MsgBox "✅ 全シートの処理が完了しました。（" & totalSheets & " シート）", vbInformation, "処理完了"
     Exit Sub
 
 ErrHandler:
+    Application.StatusBar     = False
     Application.ScreenUpdating = True
     Application.EnableEvents   = True
     Application.Calculation    = xlCalculationAutomatic
