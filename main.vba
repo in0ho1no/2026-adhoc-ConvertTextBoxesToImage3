@@ -3,11 +3,31 @@
 '═══════════════════════════════════════════════════════
 Sub RunAll()
     Dim ws As Worksheet
+
+    Application.ScreenUpdating = False
+    Application.EnableEvents   = False
+    Application.Calculation    = xlCalculationManual
+
+    On Error GoTo ErrHandler
+
     For Each ws In ThisWorkbook.Worksheets
+        ws.Activate  ' ← Selectを使うために必須
         Call ConvertLinkedPicturesToImages(ws)
         Call ConvertShapesToImages(ws)
     Next ws
+
+    Application.ScreenUpdating = True
+    Application.EnableEvents   = True
+    Application.Calculation    = xlCalculationAutomatic
+
     MsgBox "✅ 全シートの処理が完了しました。", vbInformation, "処理完了"
+    Exit Sub
+
+ErrHandler:
+    Application.ScreenUpdating = True
+    Application.EnableEvents   = True
+    Application.Calculation    = xlCalculationAutomatic
+    MsgBox "❌ RunAll エラー（" & Err.Number & "）：" & Err.Description, vbCritical, "エラー"
 End Sub
 
 '═══════════════════════════════════════════════════════
@@ -18,17 +38,13 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
     Dim shp     As Shape
     Dim stepMsg As String
     Dim L As Double, T As Double, W As Double, H As Double
-
-    Application.ScreenUpdating = False
-    Application.EnableEvents   = False
-    Application.Calculation    = xlCalculationManual
+    Dim lpNames() As String
+    Dim lpCount   As Integer
+    Dim j         As Integer
 
     On Error GoTo ErrHandler
 
-    '── 先に名前リストを取得（ループ中に図形数が変わるため）──
     stepMsg = "[" & ws.Name & "] カメラ画像の名前リスト取得中"
-    Dim lpNames() As String
-    Dim lpCount   As Integer
     lpCount = 0
 
     For Each shp In ws.Shapes
@@ -39,12 +55,10 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         End If
     Next shp
 
-    If lpCount = 0 Then GoTo Cleanup
+    If lpCount = 0 Then Exit Sub
 
-    '── 1つずつ変換 ──────────────────────────────────────
-    Dim j As Integer
     For j = 0 To lpCount - 1
-        stepMsg = "[" & ws.Name & "] CopyPicture中 [" & lpNames(j) & "]"
+        stepMsg = "[" & ws.Name & "] カメラ画像取得中 [" & lpNames(j) & "]"
 
         On Error Resume Next
         Set shp = ws.Shapes(lpNames(j))
@@ -56,6 +70,7 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         W = shp.Width
         H = shp.Height
 
+        stepMsg = "[" & ws.Name & "] CopyPicture中 [" & lpNames(j) & "]"
         shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
         stepMsg = "[" & ws.Name & "] 削除中 [" & lpNames(j) & "]"
@@ -65,27 +80,21 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         stepMsg = "[" & ws.Name & "] 貼り付け中 [" & lpNames(j) & "]"
         ws.Paste
         With ws.Shapes(ws.Shapes.Count)
-            .Left   = L
-            .Top    = T
+            .Left  = L
+            .Top   = T
             .Width  = W
             .Height = H
-            .Name   = "PIC_" & lpNames(j)
+            .Name  = "PIC_" & lpNames(j)
         End With
 
 NextLP:
     Next j
-
-Cleanup:
-    Application.ScreenUpdating = True
-    Application.EnableEvents   = True
-    Application.Calculation    = xlCalculationAutomatic
     Exit Sub
 
 ErrHandler:
-    MsgBox "❌ エラー（" & Err.Number & "）：" & Err.Description & vbCrLf & vbCrLf & _
+    MsgBox "❌ エラー（" & Err.Number & "）：" & Err.Description & vbCrLf & _
            "発生箇所：" & stepMsg, vbCritical, "エラー"
-    Resume Cleanup
-
+    Err.Clear
 End Sub
 
 '═══════════════════════════════════════════════════════
@@ -102,21 +111,21 @@ Sub ConvertShapesToImages(ws As Worksheet)
     Dim targetShape As Shape
     Dim stepMsg     As String
     Dim L As Double, T As Double, W As Double, H As Double
+    Dim tbNames()   As String
+    Dim tbCount     As Integer
+    Dim j           As Integer
+    Dim shpName     As String
+    Dim newRect     As Shape
+    Dim cellAddr    As String
 
     Set dict = CreateObject("Scripting.Dictionary")
 
-    Application.ScreenUpdating = False
-    Application.EnableEvents   = False
-    Application.Calculation    = xlCalculationManual
-
     On Error GoTo ErrHandler
 
-    '═══════════════════════════════════════════════════════
-    ' STEP 1 & 2 & 3: テキストボックス整形 → 長方形置換
-    '═══════════════════════════════════════════════════════
+    '═══════════════════════════
+    ' STEP 1-3: テキストボックス → 長方形置換
+    '═══════════════════════════
     stepMsg = "[" & ws.Name & "] テキストボックス名リスト取得中"
-    Dim tbNames() As String
-    Dim tbCount   As Integer
     tbCount = 0
 
     For Each shp In ws.Shapes
@@ -127,9 +136,7 @@ Sub ConvertShapesToImages(ws As Worksheet)
         End If
     Next shp
 
-    Dim j As Integer
     For j = 0 To tbCount - 1
-        Dim shpName As String
         shpName = tbNames(j)
         stepMsg = "[" & ws.Name & "] STEP1: 引き伸ばし中 [" & shpName & "]"
 
@@ -138,17 +145,13 @@ Sub ConvertShapesToImages(ws As Worksheet)
         On Error GoTo ErrHandler
         If shp Is Nothing Then GoTo NextTB
 
-        ' STEP1: 縦横3倍に引き伸ばす（見切れ解消）
         shp.Width  = shp.Width  * 3
         shp.Height = shp.Height * 3
 
-        ' STEP2: テキストにフィットさせる
         stepMsg = "[" & ws.Name & "] STEP2: AutoSize中 [" & shpName & "]"
         shp.TextFrame2.AutoSize = msoAutoSizeShapeToFitText
 
-        ' STEP3: 長方形を新規作成し属性を引き継ぐ
         stepMsg = "[" & ws.Name & "] STEP3: 長方形作成中 [" & shpName & "]"
-        Dim newRect As Shape
         Set newRect = ws.Shapes.AddShape( _
             msoShapeRectangle, _
             shp.Left, shp.Top, shp.Width, shp.Height)
@@ -168,7 +171,6 @@ Sub ConvertShapesToImages(ws As Worksheet)
             .Name = "RECT_" & shpName
         End With
 
-        ' 元テキストボックスを削除
         stepMsg = "[" & ws.Name & "] STEP3: 元テキストボックス削除 [" & shpName & "]"
         shp.Delete
         Set shp = Nothing
@@ -176,14 +178,12 @@ Sub ConvertShapesToImages(ws As Worksheet)
 NextTB:
     Next j
 
-    '═══════════════════════════════════════════════════════
-    ' STEP 4: TopLeftCell ごとに図形を集約
-    ' ※ すでに画像になっているもの（Picture）はスキップ
-    '═══════════════════════════════════════════════════════
+    '═══════════════════════════
+    ' STEP 4: TopLeftCell ごとに集約
+    '═══════════════════════════
     stepMsg = "[" & ws.Name & "] STEP4: 図形の集約中"
     For Each shp In ws.Shapes
         If shp.Type <> msoPicture And shp.Type <> msoLinkedPicture Then
-            Dim cellAddr As String
             cellAddr = shp.TopLeftCell.Address
             If Not dict.Exists(cellAddr) Then
                 dict.Add cellAddr, New Collection
@@ -192,9 +192,9 @@ NextTB:
         End If
     Next shp
 
-    '═══════════════════════════════════════════════════════
+    '═══════════════════════════
     ' STEP 5: グループ化 → 画像化 → 置き換え
-    '═══════════════════════════════════════════════════════
+    '═══════════════════════════
     For Each k In dict.Keys
         Set col = dict(k)
         If col.Count = 0 Then GoTo NextKey
@@ -204,7 +204,6 @@ NextTB:
             varArr(i - 1) = col(i)
         Next i
 
-        ' 1つだけならそのまま・2つ以上はSelect方式でグループ化（多数図形でも安定）
         stepMsg = "[" & ws.Name & "] STEP5: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
         If col.Count = 1 Then
             Set targetShape = ws.Shapes(varArr(0))
@@ -221,15 +220,12 @@ NextTB:
         W = targetShape.Width
         H = targetShape.Height
 
-        ' 画像としてコピー
         stepMsg = "[" & ws.Name & "] STEP5: CopyPicture中 [セル " & k & "]"
         targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
-        ' 元図形を削除
         stepMsg = "[" & ws.Name & "] STEP5: 元図形削除中 [セル " & k & "]"
         targetShape.Delete
 
-        ' シートに貼り付けて位置・サイズを復元
         stepMsg = "[" & ws.Name & "] STEP5: Paste中 [セル " & k & "]"
         ws.Paste
         With ws.Shapes(ws.Shapes.Count)
@@ -242,16 +238,10 @@ NextTB:
 
 NextKey:
     Next k
-
-Cleanup:
-    Application.ScreenUpdating = True
-    Application.EnableEvents   = True
-    Application.Calculation    = xlCalculationAutomatic
     Exit Sub
 
 ErrHandler:
-    MsgBox "❌ エラー（" & Err.Number & "）：" & Err.Description & vbCrLf & vbCrLf & _
+    MsgBox "❌ エラー（" & Err.Number & "）：" & Err.Description & vbCrLf & _
            "発生箇所：" & stepMsg, vbCritical, "エラー"
-    Resume Cleanup
-
+    Err.Clear
 End Sub
