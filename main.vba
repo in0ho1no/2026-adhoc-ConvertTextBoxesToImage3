@@ -120,7 +120,12 @@ NextTB:
         If col.Count = 1 Then
             Set targetShape = ws.Shapes(varArr(0))
         Else
-            Set targetShape = ws.Shapes.Range(varArr).Group
+            ' 1つずつSelectで選択してからGroup（多数図形でも安定）
+            ws.Shapes(varArr(0)).Select Replace:=True
+            For i = 1 To UBound(varArr)
+                ws.Shapes(varArr(i)).Select Replace:=False
+            Next i
+            Set targetShape = Selection.ShapeRange.Group
         End If
 
         L = targetShape.Left
