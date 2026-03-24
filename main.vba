@@ -7,7 +7,7 @@ Sub RunAll()
     Dim totalSheets As Integer
     Dim currentIdx  As Integer
 
-    Set wb = ActiveWorkbook  ' マクロ保存ブックではなくアクティブブックを対象にする
+    Set wb = ActiveWorkbook
 
     Application.ScreenUpdating = False
     Application.EnableEvents   = False
@@ -20,17 +20,13 @@ Sub RunAll()
 
     For Each ws In wb.Worksheets
         currentIdx = currentIdx + 1
-
-        ' 進捗をステータスバーに表示
         Application.StatusBar = "処理中... [" & currentIdx & " / " & totalSheets & "] " & ws.Name
-
         ws.Activate
         Call ConvertLinkedPicturesToImages(ws)
         Call ConvertShapesToImages(ws)
     Next ws
 
-    Application.StatusBar = False  ' ステータスバーを元に戻す
-
+    Application.StatusBar     = False
     Application.ScreenUpdating = True
     Application.EnableEvents   = True
     Application.Calculation    = xlCalculationAutomatic
@@ -87,6 +83,8 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         W = shp.Width
         H = shp.Height
 
+        ' CopyPicture直前にActivateしてクリップボードを保護
+        ws.Activate
         stepMsg = "[" & ws.Name & "] CopyPicture中 [" & lpNames(j) & "]"
         shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
@@ -249,6 +247,8 @@ NextTB:
         W = targetShape.Width
         H = targetShape.Height
 
+        ' CopyPicture直前にActivateしてクリップボードを保護
+        ws.Activate
         stepMsg = "[" & ws.Name & "] STEP5: CopyPicture中 [セル " & k & "]"
         targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
