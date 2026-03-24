@@ -189,8 +189,7 @@ Sub ConvertLinkedPicturesToImages()
     lpCount = 0
 
     For Each shp In ws.Shapes
-        ' Type=13 かつ Formula あり → カメラ機能の図形
-        If shp.Type = 13 And shp.Formula <> "" Then
+        If shp.Type = 13 Then
             lpCount = lpCount + 1
             ReDim Preserve lpNames(lpCount - 1)
             lpNames(lpCount - 1) = shp.Name
