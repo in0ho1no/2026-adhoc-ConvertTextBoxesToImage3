@@ -163,6 +163,14 @@ Sub ConvertShapesToImages(ws As Worksheet)
 
         With newRect
             .TextFrame2.TextRange.Text = shp.TextFrame2.TextRange.Text
+
+            ' フォントカラーを黒に指定（全文字に適用）
+            With .TextFrame2.TextRange.Font
+                .Fill.ForeColor.RGB = RGB(0, 0, 0)
+                .Fill.Visible       = msoTrue
+                .Fill.Solid
+            End With
+
             With .TextFrame2
                 .MarginLeft   = shp.TextFrame2.MarginLeft
                 .MarginRight  = shp.TextFrame2.MarginRight
