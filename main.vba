@@ -91,9 +91,10 @@ Sub RunAll(Optional wb As Workbook = Nothing, Optional showMsg As Boolean = True
 
     If wb Is Nothing Then Set wb = ActiveWorkbook
 
-    Application.ScreenUpdating = False
-    Application.EnableEvents   = False
-    Application.Calculation    = xlCalculationManual
+    Application.ScreenUpdating  = False
+    Application.EnableEvents    = False
+    Application.Calculation     = xlCalculationManual
+    Application.EnableCancelKey = xlErrorHandler    ' Escキーをエラーハンドラーへルーティング
 
     On Error GoTo ErrHandler
 
@@ -115,10 +116,11 @@ Sub RunAll(Optional wb As Workbook = Nothing, Optional showMsg As Boolean = True
         ws.Cells(1, 1).Select
     Next ws
 
-    Application.StatusBar      = False
-    Application.ScreenUpdating = True   ' True に戻す前に Select 済みのため表示に反映される
-    Application.EnableEvents   = True
-    Application.Calculation    = xlCalculationAutomatic
+    Application.StatusBar       = False
+    Application.ScreenUpdating  = True
+    Application.EnableEvents    = True
+    Application.Calculation     = xlCalculationAutomatic
+    Application.EnableCancelKey = xlInterrupt       ' Escキーの挙動をデフォルトに戻す
 
     If showMsg Then
         MsgBox "✅ 全シートの処理が完了しました。（" & totalSheets & " シート）", _
@@ -127,10 +129,11 @@ Sub RunAll(Optional wb As Workbook = Nothing, Optional showMsg As Boolean = True
     Exit Sub
 
 ErrHandler:
-    Application.StatusBar      = False
-    Application.ScreenUpdating = True
-    Application.EnableEvents   = True
-    Application.Calculation    = xlCalculationAutomatic
+    Application.StatusBar       = False
+    Application.ScreenUpdating  = True
+    Application.EnableEvents    = True
+    Application.Calculation     = xlCalculationAutomatic
+    Application.EnableCancelKey = xlInterrupt       ' Escキーの挙動をデフォルトに戻す
     MsgBox "❌ RunAll エラー（" & Err.Number & "）：" & Err.Description, vbCritical, "エラー"
 End Sub
 
