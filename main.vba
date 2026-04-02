@@ -48,6 +48,7 @@ Sub RunAllInFolder()
                 wb.Save
                 wb.Close SaveChanges:=False
                 Set wb = Nothing
+                DoEvents                          ' ファイルClose後にメモリ解放を促す
             Else
                 errFiles = errFiles & fileName & vbCrLf
             End If
@@ -210,6 +211,7 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         ' ── ここまでリトライ処理 ────────────────────────────────────
 
         Set newPic = ws.Shapes(ws.Shapes.Count)
+        Application.CutCopyMode = False         ' クリップボードを即座に解放
 
         ' Copy後もリンクが保持されたまま貼り付けられた場合（Type=13）は
         ' 削除してCopyPictureでフォールバック
@@ -245,6 +247,7 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
             End If
 
             Set newPic = ws.Shapes(ws.Shapes.Count)
+            Application.CutCopyMode = False     ' クリップボードを即座に解放
         End If
 
         stepMsg = "[" & ws.Name & "] 削除中 [" & lpNames(j) & "]"
@@ -406,6 +409,7 @@ NextTB:
         ' ── ここまでリトライ処理 ────────────────────────────────────
 
         Set newPic = ws.Shapes(ws.Shapes.Count)
+        Application.CutCopyMode = False         ' クリップボードを即座に解放
 
         stepMsg = "[" & ws.Name & "] STEP4: 元図形削除中 [セル " & k & "]"
         targetShape.Delete
