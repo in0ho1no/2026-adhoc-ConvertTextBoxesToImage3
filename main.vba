@@ -165,6 +165,20 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         ws.Paste
         Set newPic = ws.Shapes(ws.Shapes.Count)
 
+        ' Copy後もリンクが保持されたまま貼り付けられた場合（Type=13）は
+        ' 削除してCopyPictureでフォールバック
+        If newPic.Type = 13 Then
+            newPic.Delete
+            Set newPic = Nothing
+
+            stepMsg = "[" & ws.Name & "] フォールバック: CopyPicture中 [" & lpNames(j) & "]"
+            shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
+
+            stepMsg = "[" & ws.Name & "] フォールバック: 貼り付け中 [" & lpNames(j) & "]"
+            ws.Paste
+            Set newPic = ws.Shapes(ws.Shapes.Count)
+        End If
+
         stepMsg = "[" & ws.Name & "] 削除中 [" & lpNames(j) & "]"
         shp.Delete
         Set shp = Nothing
