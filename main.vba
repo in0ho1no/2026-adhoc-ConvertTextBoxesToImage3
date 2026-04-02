@@ -1,13 +1,76 @@
 '═══════════════════════════════════════════════════════
-' メイン実行：アクティブブックの全シートを対象に一括処理
+' フォルダ内の全 .xlsx / .xlsm を対象に一括処理          【5点目：新規追加】
 '═══════════════════════════════════════════════════════
-Sub RunAll()
-    Dim wb          As Workbook
+Sub RunAllInFolder()
+    Dim fd         As FileDialog
+    Dim folderPath As String
+    Dim fileName   As String
+    Dim wb         As Workbook
+    Dim fileCount  As Integer
+    Dim errFiles   As String
+
+    Set fd = Application.FileDialog(msoFileDialogFolderPicker)
+    fd.Title = "処理対象フォルダを選択してください"
+    If fd.Show <> -1 Then
+        MsgBox "フォルダが選択されませんでした。処理を中断します。", vbExclamation, "キャンセル"
+        Exit Sub
+    End If
+    folderPath = fd.SelectedItems(1)
+    If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+
+    fileCount = 0
+    errFiles  = ""
+
+    Dim extensions(1) As String
+    extensions(0) = "*.xlsx"
+    extensions(1) = "*.xlsm"
+
+    Dim e As Integer
+    For e = 0 To 1
+        fileName = Dir(folderPath & extensions(e))
+        Do While fileName <> ""
+            fileCount = fileCount + 1
+            Application.StatusBar = "ファイルを開いています... " & fileName
+
+            On Error Resume Next
+            Set wb = Workbooks.Open(folderPath & fileName)
+            On Error GoTo 0
+
+            If Not wb Is Nothing Then
+                Call RunAll(wb, showMsg:=False)   ' ファイル単位のMsgBoxは抑制
+                wb.Save
+                wb.Close SaveChanges:=False
+                Set wb = Nothing
+            Else
+                errFiles = errFiles & fileName & vbCrLf
+            End If
+
+            fileName = Dir()
+        Loop
+    Next e
+
+    Application.StatusBar = False
+
+    If errFiles <> "" Then
+        MsgBox "⚠️ 以下のファイルでエラーが発生しました：" & vbCrLf & errFiles, _
+               vbExclamation, "一部エラー"
+    Else
+        MsgBox "✅ フォルダ内の全ファイルの処理が完了しました。（" & fileCount & " ファイル）", _
+               vbInformation, "処理完了"
+    End If
+End Sub
+
+'═══════════════════════════════════════════════════════
+' メイン実行：指定ブックの全シートを対象に一括処理
+'   wb      : 対象ブック（省略時は ActiveWorkbook）     【5点目：引数化】
+'   showMsg : 完了MsgBoxの表示有無（フォルダ処理時は抑制）【5点目：追加】
+'═══════════════════════════════════════════════════════
+Sub RunAll(Optional wb As Workbook = Nothing, Optional showMsg As Boolean = True)
     Dim ws          As Worksheet
     Dim totalSheets As Integer
     Dim currentIdx  As Integer
 
-    Set wb = ActiveWorkbook
+    If wb Is Nothing Then Set wb = ActiveWorkbook
 
     Application.ScreenUpdating = False
     Application.EnableEvents   = False
@@ -21,21 +84,31 @@ Sub RunAll()
     For Each ws In wb.Worksheets
         currentIdx = currentIdx + 1
         Application.StatusBar = "処理中... [" & currentIdx & " / " & totalSheets & "] " & ws.Name
+
+        ' 処理前にA1を選択して図形の選択状態を解除        【2点目：追加】
         ws.Activate
+        ws.Cells(1, 1).Select
+
         Call ConvertLinkedPicturesToImages(ws)
         Call ConvertShapesToImages(ws)
+
+        ' 処理後にA1を選択して最終表示を整える             【3点目：追加】
+        ws.Cells(1, 1).Select
     Next ws
 
-    Application.StatusBar     = False
-    Application.ScreenUpdating = True
+    Application.StatusBar      = False
+    Application.ScreenUpdating = True   ' True に戻す前に Select 済みのため表示に反映される
     Application.EnableEvents   = True
     Application.Calculation    = xlCalculationAutomatic
 
-    MsgBox "✅ 全シートの処理が完了しました。（" & totalSheets & " シート）", vbInformation, "処理完了"
+    If showMsg Then
+        MsgBox "✅ 全シートの処理が完了しました。（" & totalSheets & " シート）", _
+               vbInformation, "処理完了"
+    End If
     Exit Sub
 
 ErrHandler:
-    Application.StatusBar     = False
+    Application.StatusBar      = False
     Application.ScreenUpdating = True
     Application.EnableEvents   = True
     Application.Calculation    = xlCalculationAutomatic
@@ -43,7 +116,7 @@ ErrHandler:
 End Sub
 
 '═══════════════════════════════════════════════════════
-' カメラ画像（Type=13）→ 通常画像に変換
+' カメラ画像（Type=13）→「図」に変換                     【4点目：CopyPicture→Copyに変更】
 '═══════════════════════════════════════════════════════
 Sub ConvertLinkedPicturesToImages(ws As Worksheet)
 
@@ -83,12 +156,11 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         W = shp.Width
         H = shp.Height
 
-        ' CopyPicture直前にActivateしてクリップボードを保護
         ws.Activate
-        stepMsg = "[" & ws.Name & "] CopyPicture中 [" & lpNames(j) & "]"
-        shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
+        stepMsg = "[" & ws.Name & "] Copy中 [" & lpNames(j) & "]"
+        shp.Copy                                ' ←【4点目】CopyPicture から Copy に変更
+                                                '    手動 Ctrl+C と同等の挙動で「図」として貼り付けられる
 
-        ' 先に貼り付けてから削除する（削除するとクリップボードが消えるため）
         stepMsg = "[" & ws.Name & "] 貼り付け中 [" & lpNames(j) & "]"
         ws.Paste
         Set newPic = ws.Shapes(ws.Shapes.Count)
@@ -116,7 +188,8 @@ ErrHandler:
 End Sub
 
 '═══════════════════════════════════════════════════════
-' テキストボックス整形 → 長方形置換 → グループ化 → 画像化
+' テキストボックス整形 → グループ化 → 画像化
+' ※長方形への置換を廃止し、書式を保持したままグループ化   【1点目：STEP3を削除】
 '═══════════════════════════════════════════════════════
 Sub ConvertShapesToImages(ws As Worksheet)
 
@@ -133,7 +206,6 @@ Sub ConvertShapesToImages(ws As Worksheet)
     Dim tbCount     As Integer
     Dim j           As Integer
     Dim shpName     As String
-    Dim newRect     As Shape
     Dim cellAddr    As String
     Dim newPic      As Shape
 
@@ -142,7 +214,8 @@ Sub ConvertShapesToImages(ws As Worksheet)
     On Error GoTo ErrHandler
 
     '═══════════════════════════
-    ' STEP 1-3: テキストボックス → 長方形置換
+    ' STEP 1-2: テキストボックスの見切れ対処
+    ' ※長方形への置換は行わず、書式をそのまま保持         【1点目：STEP3を削除】
     '═══════════════════════════
     stepMsg = "[" & ws.Name & "] テキストボックス名リスト取得中"
     tbCount = 0
@@ -164,51 +237,22 @@ Sub ConvertShapesToImages(ws As Worksheet)
         On Error GoTo ErrHandler
         If shp Is Nothing Then GoTo NextTB
 
-        shp.Width  = shp.Width  * 3
-        shp.Height = shp.Height * 3
+        ' 幅を3倍にしてから AutoSize することで、
+        ' テキストの折り返し基準幅を広げつつ高さを自動調整する
+        shp.Width  = shp.Width * 3
 
         stepMsg = "[" & ws.Name & "] STEP2: AutoSize中 [" & shpName & "]"
         shp.TextFrame2.AutoSize = msoAutoSizeShapeToFitText
 
-        stepMsg = "[" & ws.Name & "] STEP3: 長方形作成中 [" & shpName & "]"
-        Set newRect = ws.Shapes.AddShape( _
-            msoShapeRectangle, _
-            shp.Left, shp.Top, shp.Width, shp.Height)
-
-        With newRect
-            .TextFrame2.TextRange.Text = shp.TextFrame2.TextRange.Text
-
-            ' フォントカラーを黒に指定（全文字に適用）
-            With .TextFrame2.TextRange.Font
-                .Fill.ForeColor.RGB = RGB(0, 0, 0)
-                .Fill.Visible       = msoTrue
-                .Fill.Solid
-            End With
-
-            With .TextFrame2
-                .MarginLeft   = shp.TextFrame2.MarginLeft
-                .MarginRight  = shp.TextFrame2.MarginRight
-                .MarginTop    = shp.TextFrame2.MarginTop
-                .MarginBottom = shp.TextFrame2.MarginBottom
-                .WordWrap     = shp.TextFrame2.WordWrap
-                .AutoSize     = msoAutoSizeNone
-            End With
-            .Fill.Visible = msoFalse
-            .Line.Visible = msoFalse
-            .Name = "RECT_" & shpName
-        End With
-
-        stepMsg = "[" & ws.Name & "] STEP3: 元テキストボックス削除 [" & shpName & "]"
-        shp.Delete
-        Set shp = Nothing
+        ' ここで長方形への置換は行わない（書式保持のため）  【1点目】
 
 NextTB:
     Next j
 
     '═══════════════════════════
-    ' STEP 4: TopLeftCell ごとに集約
+    ' STEP 3: TopLeftCell ごとに集約
     '═══════════════════════════
-    stepMsg = "[" & ws.Name & "] STEP4: 図形の集約中"
+    stepMsg = "[" & ws.Name & "] STEP3: 図形の集約中"
     For Each shp In ws.Shapes
         If shp.Type <> msoPicture And shp.Type <> msoLinkedPicture Then
             cellAddr = shp.TopLeftCell.Address
@@ -220,7 +264,7 @@ NextTB:
     Next shp
 
     '═══════════════════════════
-    ' STEP 5: グループ化 → 画像化 → 置き換え
+    ' STEP 4: グループ化 → 画像化 → 置き換え
     '═══════════════════════════
     For Each k In dict.Keys
         Set col = dict(k)
@@ -231,7 +275,7 @@ NextTB:
             varArr(i - 1) = col(i)
         Next i
 
-        stepMsg = "[" & ws.Name & "] STEP5: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
+        stepMsg = "[" & ws.Name & "] STEP4: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
         If col.Count = 1 Then
             Set targetShape = ws.Shapes(varArr(0))
         Else
@@ -247,17 +291,15 @@ NextTB:
         W = targetShape.Width
         H = targetShape.Height
 
-        ' CopyPicture直前にActivateしてクリップボードを保護
         ws.Activate
-        stepMsg = "[" & ws.Name & "] STEP5: CopyPicture中 [セル " & k & "]"
+        stepMsg = "[" & ws.Name & "] STEP4: CopyPicture中 [セル " & k & "]"
         targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
-        ' 先に貼り付けてから削除する（削除するとクリップボードが消えるため）
-        stepMsg = "[" & ws.Name & "] STEP5: Paste中 [セル " & k & "]"
+        stepMsg = "[" & ws.Name & "] STEP4: Paste中 [セル " & k & "]"
         ws.Paste
         Set newPic = ws.Shapes(ws.Shapes.Count)
 
-        stepMsg = "[" & ws.Name & "] STEP5: 元図形削除中 [セル " & k & "]"
+        stepMsg = "[" & ws.Name & "] STEP4: 元図形削除中 [セル " & k & "]"
         targetShape.Delete
 
         With newPic
