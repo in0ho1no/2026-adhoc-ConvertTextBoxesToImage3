@@ -9,6 +9,7 @@ Sub RunAllInFolder()
     Dim fileCount  As Integer
     Dim errFiles   As String
 
+    ' フォルダ選択はInteractive無効化の前に行う
     Set fd = Application.FileDialog(msoFileDialogFolderPicker)
     fd.Title = "処理対象フォルダを選択してください"
     If fd.Show <> -1 Then
@@ -17,6 +18,12 @@ Sub RunAllInFolder()
     End If
     folderPath = fd.SelectedItems(1)
     If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+
+    ' ファイルループ中の誤操作を防ぐためキー・マウス入力を無効化
+    Application.Interactive    = False
+    Application.ScreenUpdating = False
+
+    On Error GoTo ErrHandler
 
     fileCount = 0
     errFiles  = ""
@@ -34,7 +41,7 @@ Sub RunAllInFolder()
 
             On Error Resume Next
             Set wb = Workbooks.Open(folderPath & fileName)
-            On Error GoTo 0
+            On Error GoTo ErrHandler
 
             If Not wb Is Nothing Then
                 Call RunAll(wb, showMsg:=False)   ' ファイル単位のMsgBoxは抑制
@@ -49,7 +56,9 @@ Sub RunAllInFolder()
         Loop
     Next e
 
-    Application.StatusBar = False
+    Application.Interactive    = True   ' ← 必ず元に戻す
+    Application.ScreenUpdating = True
+    Application.StatusBar      = False
 
     If errFiles <> "" Then
         MsgBox "⚠️ 以下のファイルでエラーが発生しました：" & vbCrLf & errFiles, _
@@ -58,6 +67,16 @@ Sub RunAllInFolder()
         MsgBox "✅ フォルダ内の全ファイルの処理が完了しました。（" & fileCount & " ファイル）", _
                vbInformation, "処理完了"
     End If
+    Exit Sub
+
+ErrHandler:
+    ' Interactive=False のまま終了するとExcelが操作不能になるため必ず戻す
+    Application.Interactive    = True
+    Application.ScreenUpdating = True
+    Application.StatusBar      = False
+    If Not wb Is Nothing Then wb.Close SaveChanges:=False
+    MsgBox "❌ RunAllInFolder エラー（" & Err.Number & "）：" & Err.Description, _
+           vbCritical, "エラー"
 End Sub
 
 '═══════════════════════════════════════════════════════
@@ -157,12 +176,36 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         H = shp.Height
 
         ws.Activate
-        stepMsg = "[" & ws.Name & "] Copy中 [" & lpNames(j) & "]"
-        shp.Copy                                ' ←【4点目】CopyPicture から Copy に変更
-                                                '    手動 Ctrl+C と同等の挙動で「図」として貼り付けられる
 
-        stepMsg = "[" & ws.Name & "] 貼り付け中 [" & lpNames(j) & "]"
-        ws.Paste
+        ' ── Copy → Paste（最大3回リトライ） ──────────────────────────
+        Dim retryLP  As Integer
+        Dim pastedLP As Boolean
+        retryLP  = 0
+        pastedLP = False
+
+        Do While retryLP < 3 And Not pastedLP
+            stepMsg = "[" & ws.Name & "] Copy中 [" & lpNames(j) & "] (試行" & retryLP + 1 & ")"
+            shp.Copy
+            DoEvents                            ' クリップボードが確定するまで処理を一度手放す
+
+            stepMsg = "[" & ws.Name & "] 貼り付け中 [" & lpNames(j) & "] (試行" & retryLP + 1 & ")"
+            On Error Resume Next
+            ws.Paste
+            If Err.Number = 0 Then
+                pastedLP = True
+            Else
+                Err.Clear
+                retryLP = retryLP + 1
+            End If
+            On Error GoTo ErrHandler
+        Loop
+
+        If Not pastedLP Then
+            MsgBox "❌ Paste失敗（3回リトライ後）：" & lpNames(j), vbCritical, "エラー"
+            GoTo NextLP
+        End If
+        ' ── ここまでリトライ処理 ────────────────────────────────────
+
         Set newPic = ws.Shapes(ws.Shapes.Count)
 
         ' Copy後もリンクが保持されたまま貼り付けられた場合（Type=13）は
@@ -171,11 +214,33 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
             newPic.Delete
             Set newPic = Nothing
 
-            stepMsg = "[" & ws.Name & "] フォールバック: CopyPicture中 [" & lpNames(j) & "]"
-            shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
+            Dim retryFB  As Integer
+            Dim pastedFB As Boolean
+            retryFB  = 0
+            pastedFB = False
 
-            stepMsg = "[" & ws.Name & "] フォールバック: 貼り付け中 [" & lpNames(j) & "]"
-            ws.Paste
+            Do While retryFB < 3 And Not pastedFB
+                stepMsg = "[" & ws.Name & "] フォールバック: CopyPicture中 [" & lpNames(j) & "] (試行" & retryFB + 1 & ")"
+                shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
+                DoEvents
+
+                stepMsg = "[" & ws.Name & "] フォールバック: 貼り付け中 [" & lpNames(j) & "] (試行" & retryFB + 1 & ")"
+                On Error Resume Next
+                ws.Paste
+                If Err.Number = 0 Then
+                    pastedFB = True
+                Else
+                    Err.Clear
+                    retryFB = retryFB + 1
+                End If
+                On Error GoTo ErrHandler
+            Loop
+
+            If Not pastedFB Then
+                MsgBox "❌ フォールバックPaste失敗（3回リトライ後）：" & lpNames(j), vbCritical, "エラー"
+                GoTo NextLP
+            End If
+
             Set newPic = ws.Shapes(ws.Shapes.Count)
         End If
 
@@ -290,6 +355,7 @@ NextTB:
         Next i
 
         stepMsg = "[" & ws.Name & "] STEP4: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
+        ws.Activate                             ' Select前にアクティブシートを保証
         If col.Count = 1 Then
             Set targetShape = ws.Shapes(varArr(0))
         Else
@@ -306,11 +372,36 @@ NextTB:
         H = targetShape.Height
 
         ws.Activate
-        stepMsg = "[" & ws.Name & "] STEP4: CopyPicture中 [セル " & k & "]"
-        targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
 
-        stepMsg = "[" & ws.Name & "] STEP4: Paste中 [セル " & k & "]"
-        ws.Paste
+        ' ── CopyPicture → Paste（最大3回リトライ） ──────────────────
+        Dim retrySH  As Integer
+        Dim pastedSH As Boolean
+        retrySH  = 0
+        pastedSH = False
+
+        Do While retrySH < 3 And Not pastedSH
+            stepMsg = "[" & ws.Name & "] STEP4: CopyPicture中 [セル " & k & "] (試行" & retrySH + 1 & ")"
+            targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
+            DoEvents                            ' クリップボードが確定するまで処理を一度手放す
+
+            stepMsg = "[" & ws.Name & "] STEP4: Paste中 [セル " & k & "] (試行" & retrySH + 1 & ")"
+            On Error Resume Next
+            ws.Paste
+            If Err.Number = 0 Then
+                pastedSH = True
+            Else
+                Err.Clear
+                retrySH = retrySH + 1
+            End If
+            On Error GoTo ErrHandler
+        Loop
+
+        If Not pastedSH Then
+            MsgBox "❌ Paste失敗（3回リトライ後）：セル " & k, vbCritical, "エラー"
+            GoTo NextKey
+        End If
+        ' ── ここまでリトライ処理 ────────────────────────────────────
+
         Set newPic = ws.Shapes(ws.Shapes.Count)
 
         stepMsg = "[" & ws.Name & "] STEP4: 元図形削除中 [セル " & k & "]"
