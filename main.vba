@@ -145,6 +145,11 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
     Dim lpCount   As Integer
     Dim j         As Integer
     Dim newPic    As Shape
+    Dim retryFB   As Integer
+    Dim pastedFB  As Boolean
+    Dim copiedFB  As Boolean
+    Dim fbFormats(1) As Long
+    Dim fi        As Integer
 
     On Error GoTo ErrHandler
 
@@ -214,30 +219,53 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
             newPic.Delete
             Set newPic = Nothing
 
-            Dim retryFB  As Integer
-            Dim pastedFB As Boolean
             retryFB  = 0
             pastedFB = False
 
-            Do While retryFB < 3 And Not pastedFB
-                stepMsg = "[" & ws.Name & "] フォールバック: CopyPicture中 [" & lpNames(j) & "] (試行" & retryFB + 1 & ")"
-                shp.CopyPicture Appearance:=xlScreen, Format:=xlPicture
-                DoEvents
+            ' CopyPicture のフォーマットを xlPicture(2) → xlBitmap(1) の順で試行
+            Dim fbFormats(1) As Long
+            fbFormats(0) = xlPicture
+            fbFormats(1) = xlBitmap
 
-                stepMsg = "[" & ws.Name & "] フォールバック: 貼り付け中 [" & lpNames(j) & "] (試行" & retryFB + 1 & ")"
-                On Error Resume Next
-                ws.Paste
-                If Err.Number = 0 Then
-                    pastedFB = True
-                Else
-                    Err.Clear
-                    retryFB = retryFB + 1
-                End If
-                On Error GoTo ErrHandler
-            Loop
+            For fi = 0 To 1
+                If pastedFB Then Exit For
+                retryFB = 0
+
+                Do While retryFB < 3 And Not pastedFB
+                    stepMsg = "[" & ws.Name & "] フォールバック: CopyPicture中 [" & lpNames(j) & "] " & _
+                              "Format=" & fbFormats(fi) & " (試行" & retryFB + 1 & ")"
+                    copiedFB = False
+                    On Error Resume Next
+                    shp.CopyPicture Appearance:=xlScreen, Format:=fbFormats(fi)
+                    If Err.Number = 0 Then
+                        copiedFB = True
+                    Else
+                        Err.Clear
+                    End If
+                    On Error GoTo ErrHandler
+
+                    If Not copiedFB Then
+                        retryFB = retryFB + 1
+                    Else
+                        DoEvents
+                        stepMsg = "[" & ws.Name & "] フォールバック: 貼り付け中 [" & lpNames(j) & "] " & _
+                                  "Format=" & fbFormats(fi) & " (試行" & retryFB + 1 & ")"
+                        On Error Resume Next
+                        ws.Paste
+                        If Err.Number = 0 Then
+                            pastedFB = True
+                        Else
+                            Err.Clear
+                            retryFB = retryFB + 1
+                        End If
+                        On Error GoTo ErrHandler
+                    End If
+                Loop
+            Next fi
 
             If Not pastedFB Then
-                MsgBox "❌ フォールバックPaste失敗（3回リトライ後）：" & lpNames(j), vbCritical, "エラー"
+                ' xlPicture・xlBitmap ともに失敗：この図形はスキップ
+                Application.CutCopyMode = False
                 GoTo NextLP
             End If
 
