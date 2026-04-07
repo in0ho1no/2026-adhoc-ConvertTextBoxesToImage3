@@ -287,6 +287,10 @@ Sub ConvertShapesToImages(ws As Worksheet)
     Dim shpName     As String
     Dim cellAddr    As String
     Dim newPic      As Shape
+    Dim validNames() As String
+    Dim validCount   As Integer
+    Dim vi           As Integer
+    Dim chkShp       As Shape
 
     Set dict = CreateObject("Scripting.Dictionary")
 
@@ -356,12 +360,32 @@ NextTB:
 
         stepMsg = "[" & ws.Name & "] STEP4: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
         ws.Activate
-        If col.Count = 1 Then
-            Set targetShape = ws.Shapes(varArr(0))
+
+        ' グループ化前に各図形の存在を確認し、有効なものだけに絞り込む
+        ' （STEP1-2のAutoSize処理等で名前が無効になった図形が混在するとRange()が1004エラーになるため）
+        validCount = 0
+        ReDim validNames(UBound(varArr))
+
+        For vi = 0 To UBound(varArr)
+            Set chkShp = Nothing
+            On Error Resume Next
+            Set chkShp = ws.Shapes(varArr(vi))
+            On Error GoTo ErrHandler
+            If Not chkShp Is Nothing Then
+                validNames(validCount) = varArr(vi)
+                validCount = validCount + 1
+            End If
+        Next vi
+
+        If validCount = 0 Then GoTo NextKey
+        ReDim Preserve validNames(validCount - 1)
+
+        If validCount = 1 Then
+            Set targetShape = ws.Shapes(validNames(0))
         Else
             ' Select を使わず ShapeRange を直接生成してグループ化
             ' → Select/Replace:=False の失敗を根本回避
-            Set targetShape = ws.Shapes.Range(varArr).Group
+            Set targetShape = ws.Shapes.Range(validNames).Group
         End If
 
         L = targetShape.Left
