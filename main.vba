@@ -145,6 +145,8 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
     Dim lpCount   As Integer
     Dim j         As Integer
     Dim newPic    As Shape
+    Dim retryLP   As Integer
+    Dim pastedLP  As Boolean
     Dim retryFB   As Integer
     Dim pastedFB  As Boolean
     Dim copiedFB  As Boolean
@@ -182,8 +184,6 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
         ws.Activate
 
         ' ── Copy → Paste（最大3回リトライ） ──────────────────────────
-        Dim retryLP  As Integer
-        Dim pastedLP As Boolean
         retryLP  = 0
         pastedLP = False
 
@@ -223,7 +223,6 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
             pastedFB = False
 
             ' CopyPicture のフォーマットを xlPicture(2) → xlBitmap(1) の順で試行
-            Dim fbFormats(1) As Long
             fbFormats(0) = xlPicture
             fbFormats(1) = xlBitmap
 
@@ -325,6 +324,8 @@ Sub ConvertShapesToImages(ws As Worksheet)
     Dim seqNo        As Long
     Dim skipNames    As Object
     Dim keepTrying   As Boolean
+    Dim retrySH      As Integer
+    Dim pastedSH     As Boolean
 
     Set dict = CreateObject("Scripting.Dictionary")
 
@@ -502,8 +503,6 @@ NextTB:
         ws.Activate
 
         ' ── CopyPicture → Paste（最大3回リトライ） ──────────────────
-        Dim retrySH  As Integer
-        Dim pastedSH As Boolean
         retrySH  = 0
         pastedSH = False
 
