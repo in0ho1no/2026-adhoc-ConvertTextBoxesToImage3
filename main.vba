@@ -354,13 +354,19 @@ NextTB:
     '═══════════════════════════
     stepMsg = "[" & ws.Name & "] STEP4: 図形の集約中"
     For Each shp In ws.Shapes
-        If shp.Type <> msoPicture And shp.Type <> msoLinkedPicture Then
-            cellAddr = shp.TopLeftCell.Address
-            If Not dict.Exists(cellAddr) Then
-                dict.Add cellAddr, New Collection
-            End If
-            dict(cellAddr).Add shp.Name
-        End If
+        ' グループ化できない種別（OLE・フォームコントロール・ActiveX）は除外
+        Select Case shp.Type
+            Case msoPicture, msoLinkedPicture, _
+                 msoEmbeddedOLEObject, msoFormControl, _
+                 msoLinkedOLEObject, msoOLEControlObject
+                ' 対象外：スキップ
+            Case Else
+                cellAddr = shp.TopLeftCell.Address
+                If Not dict.Exists(cellAddr) Then
+                    dict.Add cellAddr, New Collection
+                End If
+                dict(cellAddr).Add shp.Name
+        End Select
     Next shp
 
     '═══════════════════════════
