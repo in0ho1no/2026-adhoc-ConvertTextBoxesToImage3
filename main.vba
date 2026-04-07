@@ -386,25 +386,41 @@ NextTB:
     Loop
 
     '═══════════════════════════
+    ' STEP 3.5: グループ解除後の全図形を再採番
+    ' グループ解除で露出した子シェイプは元の名前を引き継ぐため
+    ' 既存図形と同名になるケースがある。STEP0と同様に全図形を一意な名前に採番し直す
+    '═══════════════════════════
+    stepMsg = "[" & ws.Name & "] STEP3.5: 図形名の再一意化中"
+    seqNo = 0
+    For Each shp In ws.Shapes
+        ' skipNamesに記録された解除失敗グループは名前が変わると追跡できなくなるため
+        ' 一旦skipNamesを作り直す（名前ベースの管理をリセット）
+        seqNo = seqNo + 1
+        shp.Name = "SHP2_" & seqNo
+    Next shp
+    ' skipNamesはSTEP4で参照されるが名前が変わったため内容が無効になる
+    ' 代わりにSTEP4でType判定のみで除外する（skipNamesはクリア）
+    Set skipNames = CreateObject("Scripting.Dictionary")
+
+    '═══════════════════════════
     ' STEP 4: TopLeftCell ごとに集約
     '═══════════════════════════
     stepMsg = "[" & ws.Name & "] STEP4: 図形の集約中"
     For Each shp In ws.Shapes
-        ' グループ化できない種別（OLE・フォームコントロール・ActiveX）は除外
-        ' Ungroupできなかった図形（skipNames）も除外
+        ' グループ化できない種別（OLE・フォームコントロール・ActiveX）および
+        ' 解除失敗グループ（再採番後もmsoGroupのまま残っているもの）は除外
         Select Case shp.Type
             Case msoPicture, msoLinkedPicture, _
                  msoEmbeddedOLEObject, msoFormControl, _
-                 msoLinkedOLEObject, msoOLEControlObject
+                 msoLinkedOLEObject, msoOLEControlObject, _
+                 msoGroup
                 ' 対象外：スキップ
             Case Else
-                If Not skipNames.Exists(shp.Name) Then
-                    cellAddr = shp.TopLeftCell.Address
-                    If Not dict.Exists(cellAddr) Then
-                        dict.Add cellAddr, New Collection
-                    End If
-                    dict(cellAddr).Add shp.Name
+                cellAddr = shp.TopLeftCell.Address
+                If Not dict.Exists(cellAddr) Then
+                    dict.Add cellAddr, New Collection
                 End If
+                dict(cellAddr).Add shp.Name
         End Select
     Next shp
 
