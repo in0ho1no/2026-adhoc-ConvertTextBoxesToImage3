@@ -491,32 +491,35 @@ NextTB:
 
         ws.Activate
 
-        ' ── CopyPicture → Paste（最大3回リトライ） ──────────────────
-        retrySH  = 0
+        ' ── CopyPicture → Paste（最大3回リトライ・単一Resume Nextで保護） ──
         pastedSH = False
 
-        Do While retrySH < 3 And Not pastedSH
+        On Error Resume Next
+        For retrySH = 0 To 2
+            If pastedSH Then Exit For
+            Err.Clear
             stepMsg = "[" & ws.Name & "] STEP5: CopyPicture中 [セル " & k & "] (試行" & retrySH + 1 & ")"
             targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
-            DoEvents                            ' クリップボードが確定するまで処理を一度手放す
-
-            stepMsg = "[" & ws.Name & "] STEP5: Paste中 [セル " & k & "] (試行" & retrySH + 1 & ")"
-            On Error Resume Next
-            ws.Paste
-            If Err.Number = 0 Then
-                pastedSH = True
-            Else
+            If Err.Number <> 0 Then
                 Err.Clear
-                retrySH = retrySH + 1
+            Else
+                DoEvents
+                stepMsg = "[" & ws.Name & "] STEP5: Paste中 [セル " & k & "] (試行" & retrySH + 1 & ")"
+                ws.Paste
+                If Err.Number = 0 Then
+                    pastedSH = True
+                Else
+                    Err.Clear
+                End If
             End If
-            On Error GoTo ErrHandler
-        Loop
+        Next retrySH
+        On Error GoTo ErrHandler        ' リトライ完了後に復元
+        ' ── ここまでリトライ処理 ────────────────────────────────────
 
         If Not pastedSH Then
             MsgBox "❌ Paste失敗（3回リトライ後）：セル " & k, vbCritical, "エラー"
             GoTo NextKey
         End If
-        ' ── ここまでリトライ処理 ────────────────────────────────────
 
         Set newPic = ws.Shapes(ws.Shapes.Count)
         Application.CutCopyMode = False         ' クリップボードを即座に解放
