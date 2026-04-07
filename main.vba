@@ -333,9 +333,26 @@ NextTB:
     Next j
 
     '═══════════════════════════
-    ' STEP 3: TopLeftCell ごとに集約
+    ' STEP 3: 既存グループを全解除（ネスト対応）
+    ' グループの子が混在したままだと Shapes.Range().Group が1004エラーになるため
     '═══════════════════════════
-    stepMsg = "[" & ws.Name & "] STEP3: 図形の集約中"
+    stepMsg = "[" & ws.Name & "] STEP3: グループ解除中"
+    Dim ungrouped As Boolean
+    Do
+        ungrouped = True
+        For Each shp In ws.Shapes
+            If shp.Type = msoGroup Then
+                shp.Ungroup
+                ungrouped = False
+                Exit For             ' 解除後はコレクションが変化するため先頭から再走査
+            End If
+        Next shp
+    Loop Until ungrouped
+
+    '═══════════════════════════
+    ' STEP 4: TopLeftCell ごとに集約
+    '═══════════════════════════
+    stepMsg = "[" & ws.Name & "] STEP4: 図形の集約中"
     For Each shp In ws.Shapes
         If shp.Type <> msoPicture And shp.Type <> msoLinkedPicture Then
             cellAddr = shp.TopLeftCell.Address
@@ -347,7 +364,7 @@ NextTB:
     Next shp
 
     '═══════════════════════════
-    ' STEP 4: グループ化 → 画像化 → 置き換え
+    ' STEP 5: グループ化 → 画像化 → 置き換え
     '═══════════════════════════
     For Each k In dict.Keys
         Set col = dict(k)
@@ -358,7 +375,7 @@ NextTB:
             varArr(i - 1) = col(i)
         Next i
 
-        stepMsg = "[" & ws.Name & "] STEP4: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
+        stepMsg = "[" & ws.Name & "] STEP5: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
         ws.Activate
 
         ' グループ化前に各図形の存在を確認し、有効なものだけに絞り込む
@@ -402,11 +419,11 @@ NextTB:
         pastedSH = False
 
         Do While retrySH < 3 And Not pastedSH
-            stepMsg = "[" & ws.Name & "] STEP4: CopyPicture中 [セル " & k & "] (試行" & retrySH + 1 & ")"
+            stepMsg = "[" & ws.Name & "] STEP5: CopyPicture中 [セル " & k & "] (試行" & retrySH + 1 & ")"
             targetShape.CopyPicture Appearance:=xlScreen, Format:=xlPicture
             DoEvents                            ' クリップボードが確定するまで処理を一度手放す
 
-            stepMsg = "[" & ws.Name & "] STEP4: Paste中 [セル " & k & "] (試行" & retrySH + 1 & ")"
+            stepMsg = "[" & ws.Name & "] STEP5: Paste中 [セル " & k & "] (試行" & retrySH + 1 & ")"
             On Error Resume Next
             ws.Paste
             If Err.Number = 0 Then
@@ -427,7 +444,7 @@ NextTB:
         Set newPic = ws.Shapes(ws.Shapes.Count)
         Application.CutCopyMode = False         ' クリップボードを即座に解放
 
-        stepMsg = "[" & ws.Name & "] STEP4: 元図形削除中 [セル " & k & "]"
+        stepMsg = "[" & ws.Name & "] STEP5: 元図形削除中 [セル " & k & "]"
         targetShape.Delete
 
         With newPic
