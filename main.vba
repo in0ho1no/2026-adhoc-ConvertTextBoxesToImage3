@@ -149,7 +149,6 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
     Dim pastedLP  As Boolean
     Dim retryFB   As Integer
     Dim pastedFB  As Boolean
-    Dim copiedFB  As Boolean
     Dim fbFormats(1) As Long
     Dim fi        As Integer
 
@@ -219,48 +218,38 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
             newPic.Delete
             Set newPic = Nothing
 
-            retryFB  = 0
             pastedFB = False
-
-            ' CopyPicture のフォーマットを xlPicture(2) → xlBitmap(1) の順で試行
             fbFormats(0) = xlPicture
             fbFormats(1) = xlBitmap
 
+            ' フォールバック全体を単一の Resume Next で囲む
+            ' → On Error GoTo / Resume Next の切り替え隙間でErrHandlerに
+            '   流れ込むケースを根本回避
+            On Error Resume Next
             For fi = 0 To 1
                 If pastedFB Then Exit For
-                retryFB = 0
-
-                Do While retryFB < 3 And Not pastedFB
+                For retryFB = 0 To 2
+                    If pastedFB Then Exit For
+                    Err.Clear
                     stepMsg = "[" & ws.Name & "] フォールバック: CopyPicture中 [" & lpNames(j) & "] " & _
                               "Format=" & fbFormats(fi) & " (試行" & retryFB + 1 & ")"
-                    copiedFB = False
-                    On Error Resume Next
                     shp.CopyPicture Appearance:=xlScreen, Format:=fbFormats(fi)
-                    If Err.Number = 0 Then
-                        copiedFB = True
-                    Else
+                    If Err.Number <> 0 Then
                         Err.Clear
-                    End If
-                    On Error GoTo ErrHandler
-
-                    If Not copiedFB Then
-                        retryFB = retryFB + 1
                     Else
                         DoEvents
                         stepMsg = "[" & ws.Name & "] フォールバック: 貼り付け中 [" & lpNames(j) & "] " & _
                                   "Format=" & fbFormats(fi) & " (試行" & retryFB + 1 & ")"
-                        On Error Resume Next
                         ws.Paste
                         If Err.Number = 0 Then
                             pastedFB = True
                         Else
                             Err.Clear
-                            retryFB = retryFB + 1
                         End If
-                        On Error GoTo ErrHandler
                     End If
-                Loop
+                Next retryFB
             Next fi
+            On Error GoTo ErrHandler    ' フォールバック完了後に復元
 
             If Not pastedFB Then
                 ' xlPicture・xlBitmap ともに失敗：この図形はスキップ
