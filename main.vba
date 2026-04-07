@@ -113,6 +113,7 @@ Sub RunAll(wb As Workbook)
 
         ' 処理後にA1を選択して最終表示を整える             【3点目：追加】
         ws.Cells(1, 1).Select
+        DoEvents                    ' シート単位でGDI解放をOSに促す
     Next ws
 
     Application.StatusBar       = False
@@ -255,6 +256,8 @@ Sub ConvertLinkedPicturesToImages(ws As Worksheet)
             .Height = H
             .Name   = "PIC_" & lpNames(j)
         End With
+        Set newPic = Nothing    ' Pictureオブジェクト参照を即座に解放
+        DoEvents                ' GDI解放をOSに促す
 
 NextLP:
     Next j
@@ -292,6 +295,8 @@ Sub ConvertShapesToImages(ws As Worksheet)
     Dim vi           As Integer
     Dim chkShp       As Shape
     Dim seqNo        As Long
+    Dim skipNames    As Object
+    Dim keepTrying   As Boolean
 
     Set dict = CreateObject("Scripting.Dictionary")
 
@@ -346,21 +351,39 @@ NextTB:
     Next j
 
     '═══════════════════════════
-    ' STEP 3: 既存グループを全解除（ネスト対応）
-    ' グループの子が混在したままだと Shapes.Range().Group が1004エラーになるため
+    ' STEP 3: 既存グループを全解除（ネスト対応・失敗スキップ）
+    ' ・解除成功後はコレクションが変化するため先頭から再走査
+    ' ・解除失敗したグループはfailedGroupsに記録してスキップ
+    '   →無限ループ防止 兼 後続STEP4の辞書集約からも除外
     '═══════════════════════════
     stepMsg = "[" & ws.Name & "] STEP3: グループ解除中"
-    Dim ungrouped As Boolean
-    Do
-        ungrouped = True
+    Set skipNames = CreateObject("Scripting.Dictionary")
+    keepTrying = True
+    ws.Activate
+
+    Do While keepTrying
+        keepTrying = False
         For Each shp In ws.Shapes
             If shp.Type = msoGroup Then
-                shp.Ungroup
-                ungrouped = False
-                Exit For             ' 解除後はコレクションが変化するため先頭から再走査
+                If skipNames.Exists(shp.Name) Then
+                    ' 既に失敗済み：スキップして次の図形へ
+                Else
+                    On Error Resume Next
+                    shp.Ungroup
+                    If Err.Number <> 0 Then
+                        ' 解除失敗：記録してこの図形はスキップ、走査は継続
+                        skipNames.Add shp.Name, True
+                        Err.Clear
+                    Else
+                        ' 解除成功：コレクションが変化するため先頭から再走査
+                        keepTrying = True
+                        Exit For
+                    End If
+                    On Error GoTo ErrHandler
+                End If
             End If
         Next shp
-    Loop Until ungrouped
+    Loop
 
     '═══════════════════════════
     ' STEP 4: TopLeftCell ごとに集約
@@ -368,17 +391,20 @@ NextTB:
     stepMsg = "[" & ws.Name & "] STEP4: 図形の集約中"
     For Each shp In ws.Shapes
         ' グループ化できない種別（OLE・フォームコントロール・ActiveX）は除外
+        ' Ungroupできなかった図形（skipNames）も除外
         Select Case shp.Type
             Case msoPicture, msoLinkedPicture, _
                  msoEmbeddedOLEObject, msoFormControl, _
                  msoLinkedOLEObject, msoOLEControlObject
                 ' 対象外：スキップ
             Case Else
-                cellAddr = shp.TopLeftCell.Address
-                If Not dict.Exists(cellAddr) Then
-                    dict.Add cellAddr, New Collection
+                If Not skipNames.Exists(shp.Name) Then
+                    cellAddr = shp.TopLeftCell.Address
+                    If Not dict.Exists(cellAddr) Then
+                        dict.Add cellAddr, New Collection
+                    End If
+                    dict(cellAddr).Add shp.Name
                 End If
-                dict(cellAddr).Add shp.Name
         End Select
     Next shp
 
@@ -465,6 +491,7 @@ NextTB:
 
         stepMsg = "[" & ws.Name & "] STEP5: 元図形削除中 [セル " & k & "]"
         targetShape.Delete
+        Set targetShape = Nothing   ' Shapeオブジェクト参照を即座に解放
 
         With newPic
             .Left   = L
@@ -473,6 +500,8 @@ NextTB:
             .Height = H
             .Name   = "IMG_" & Replace(k, "$", "")
         End With
+        Set newPic = Nothing        ' Pictureオブジェクト参照を即座に解放
+        DoEvents                    ' GDI解放をOSに促す
 
 NextKey:
     Next k
