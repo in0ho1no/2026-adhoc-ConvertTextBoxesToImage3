@@ -1,5 +1,5 @@
 '═══════════════════════════════════════════════════════
-' フォルダ内の全 .xlsx / .xlsm を対象に一括処理          【5点目：新規追加】
+' フォルダ内の全 .xlsx / .xlsm を対象に一括処理
 '═══════════════════════════════════════════════════════
 Sub RunAllInFolder()
     Dim fd         As FileDialog
@@ -44,7 +44,7 @@ Sub RunAllInFolder()
             On Error GoTo ErrHandler
 
             If Not wb Is Nothing Then
-                Call RunAll(wb, showMsg:=False)   ' ファイル単位のMsgBoxは抑制
+                Call RunAll(wb)
                 wb.Save
                 wb.Close SaveChanges:=False
                 Set wb = Nothing
@@ -81,16 +81,14 @@ ErrHandler:
 End Sub
 
 '═══════════════════════════════════════════════════════
-' メイン実行：指定ブックの全シートを対象に一括処理
-'   wb      : 対象ブック（省略時は ActiveWorkbook）     【5点目：引数化】
-'   showMsg : 完了MsgBoxの表示有無（フォルダ処理時は抑制）【5点目：追加】
+' 指定ブックの全シートを処理（RunAllInFolder から呼び出す内部処理）
 '═══════════════════════════════════════════════════════
-Sub RunAll(Optional wb As Workbook = Nothing, Optional showMsg As Boolean = True)
+Sub RunAll(wb As Workbook)
     Dim ws          As Worksheet
     Dim totalSheets As Integer
     Dim currentIdx  As Integer
 
-    If wb Is Nothing Then Set wb = ActiveWorkbook
+    If wb Is Nothing Then Exit Sub
 
     Application.ScreenUpdating  = False
     Application.EnableEvents    = False
@@ -123,10 +121,6 @@ Sub RunAll(Optional wb As Workbook = Nothing, Optional showMsg As Boolean = True
     Application.Calculation     = xlCalculationAutomatic
     Application.EnableCancelKey = xlInterrupt       ' Escキーの挙動をデフォルトに戻す
 
-    If showMsg Then
-        MsgBox "✅ 全シートの処理が完了しました。（" & totalSheets & " シート）", _
-               vbInformation, "処理完了"
-    End If
     Exit Sub
 
 ErrHandler:
@@ -139,7 +133,7 @@ ErrHandler:
 End Sub
 
 '═══════════════════════════════════════════════════════
-' カメラ画像（Type=13）→「図」に変換                     【4点目：CopyPicture→Copyに変更】
+' カメラ画像（Type=13）→「図」に変換
 '═══════════════════════════════════════════════════════
 Sub ConvertLinkedPicturesToImages(ws As Worksheet)
 
@@ -361,15 +355,13 @@ NextTB:
         Next i
 
         stepMsg = "[" & ws.Name & "] STEP4: グループ化中 [セル " & k & " / 図形数:" & col.Count & "]"
-        ws.Activate                             ' Select前にアクティブシートを保証
+        ws.Activate
         If col.Count = 1 Then
             Set targetShape = ws.Shapes(varArr(0))
         Else
-            ws.Shapes(varArr(0)).Select Replace:=True
-            For i = 1 To UBound(varArr)
-                ws.Shapes(varArr(i)).Select Replace:=False
-            Next i
-            Set targetShape = Selection.ShapeRange.Group
+            ' Select を使わず ShapeRange を直接生成してグループ化
+            ' → Select/Replace:=False の失敗を根本回避
+            Set targetShape = ws.Shapes.Range(varArr).Group
         End If
 
         L = targetShape.Left
