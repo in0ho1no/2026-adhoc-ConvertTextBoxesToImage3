@@ -287,7 +287,7 @@ Sub ConvertShapesToImages(ws As Worksheet)
     Dim shpName     As String
     Dim cellAddr    As String
     Dim newPic      As Shape
-    Dim validNames() As String
+    Dim validNames() As Variant
     Dim validCount   As Integer
     Dim vi           As Integer
     Dim chkShp       As Shape
