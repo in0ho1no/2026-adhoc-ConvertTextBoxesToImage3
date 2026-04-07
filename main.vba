@@ -291,10 +291,23 @@ Sub ConvertShapesToImages(ws As Worksheet)
     Dim validCount   As Integer
     Dim vi           As Integer
     Dim chkShp       As Shape
+    Dim seqNo        As Long
 
     Set dict = CreateObject("Scripting.Dictionary")
 
     On Error GoTo ErrHandler
+
+    '═══════════════════════════
+    ' STEP 0: 全図形を一意な名前に採番し直す
+    ' 同名Shapeが複数存在するとShapes(name)が最初の1つしか返さず
+    ' Shapes.Range()やDict集約が誤動作するため、処理前に名前を確定する
+    '═══════════════════════════
+    stepMsg = "[" & ws.Name & "] STEP0: 図形名の一意化中"
+    seqNo = 0
+    For Each shp In ws.Shapes
+        seqNo = seqNo + 1
+        shp.Name = "SHP_" & seqNo
+    Next shp
 
     '═══════════════════════════
     ' STEP 1-2: テキストボックスの見切れ対処
